@@ -1,0 +1,16 @@
+- Project from the lesson is set up
+- `students: list[dict]` global variable exists to simulate the database (_the simulated storage for all the students_)
+  - The `Student` data structure has next feilds
+    - `id: int` - unique identifier of the student
+    - `name: str` - student's name
+    - `marks: list[int]` - list of marks
+    - `info: str` - detailed information of the student
+- Next functions are added to the application:
+  - `main()` - application entrypoint
+  - `show_students()` - function to represent all students
+  - `show_student(id: int)` - function to show student by `id`
+  - `add_student(name: str, marks: list[int], details: str | None)` - function to add new student.
+    - The `name` is required but the `details` is optional.
+    - if `details` is optional - it is saved as empty string to the storage
+    - The `marks` is always created as empty list
+    - Yes, there is no way to add a mark after user is added (this is left for the next lessons)
