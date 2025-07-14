@@ -1,10 +1,14 @@
+from datetime import datetime, timedelta
 import queue
 import threading
 import time
-from datetime import datetime, timedelta
+import random
+from typing import Literal
 
 OrderRequestBody = tuple[str, datetime]
+ReadyOrderRequestBody = tuple[str, datetime, Literal["Uklon", "Uber"]]
 
+PROVIDERS: list = ["Uklon", "Uber"]
 
 storage = {
     "users": [],
@@ -35,6 +39,7 @@ storage = {
 class Scheduler:
     def __init__(self):
         self.orders: queue.Queue[OrderRequestBody] = queue.Queue()
+        self.ready_orders: queue.Queue[ReadyOrderRequestBody] = queue.Queue()
 
     def process_orders(self) -> None:
         print("SCHEDULER PROCESSING...")
@@ -48,7 +53,36 @@ class Scheduler:
                 self.orders.put(order)
                 time.sleep(0.5)
             else:
+                amount_uklon = 0
+                amount_uber = 0
+
+                for order in self.ready_orders.queue:
+                    if order[2] == "Uklon":
+                        amount_uklon += 1
+                    else:
+                        amount_uber += 1
+
+                if self.ready_orders.qsize() == 0 or amount_uklon == amount_uber:
+                    selected_provider: Literal["Uklon", "Uber"] = random.choice(PROVIDERS)
+                    self.ready_orders.put((order[0], order[1], selected_provider))
+                elif amount_uber > amount_uklon:
+                    self.ready_orders.put((order[0], order[1], "Uklon"))
+                else:
+                    self.ready_orders.put((order[0], order[1], "Uber"))
+
                 print(f"\n\t{order[0]} SENT TO SHIPPING DEPARTMENT")
+
+    def process_delivery(self) -> None:
+        while True:
+            order = self.ready_orders.get(True)
+
+            if order[2] == "Uklon":
+                time.sleep(5)
+                print(f"{order[0]} is delivered by Uklon")
+            else:
+                time.sleep(3)
+                print(f"{order[0]} is delivered by Uber")
+
 
     def add_order(self, order: OrderRequestBody) -> None:
         self.orders.put(order)
@@ -59,6 +93,8 @@ def main():
     scheduler = Scheduler()
     thread = threading.Thread(target=scheduler.process_orders, daemon=True)
     thread.start()
+    delivery_thread = threading.Thread(target=scheduler.process_delivery, daemon=True)
+    delivery_thread.start()
 
     # user input:
     # A 5 (in 5 days)
