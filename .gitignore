@@ -1,0 +1,40 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Django stuff:
+*.log
+*.pot
+*.pyc
+*.pyo
+db.sqlite3
+media/
+staticfiles/
+
+# If you use PostgreSQL/MySQL, ignore local .env with DB credentials
+.env
+
+# Virtual environment
+venv/
+env/
+ENV/
+.venv/
+
+# VSCode settings
+.vscode/
+
+# PyCharm
+.idea/
+
+# Migrations (optional, if you're resetting often)
+**/migrations/*.py
+**/migrations/*.pyc
+!**/migrations/__init__.py
+
+# OS-specific
+.DS_Store
+Thumbs.db
