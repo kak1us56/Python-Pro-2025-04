@@ -9,6 +9,7 @@ class DishAdmin(admin.ModelAdmin):
     list_display = ('name', 'price', 'restaurant')
     search_fields = ('name',)
     list_filter = ('restaurant', 'name')
+    # actions = ("import_csv",)
 
 class DishOrderItemInline(admin.TabularInline):
     model = OrderItem

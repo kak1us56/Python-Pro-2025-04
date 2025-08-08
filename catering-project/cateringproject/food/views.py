@@ -1,13 +1,19 @@
+import csv
+import io
 from datetime import date
 from django.shortcuts import render
-from rest_framework import permissions, routers, serializers, viewsets
+from django.shortcuts import redirect
+from rest_framework import permissions, routers, serializers, viewsets, filters
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.decorators import action, permission_classes
+from rest_framework.decorators import action, permission_classes, api_view
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.exceptions import ValidationError
 from django.db import transaction
+from rest_framework.pagination import LimitOffsetPagination
+from django_filters.rest_framework import DjangoFilterBackend
+from django_filters import rest_framework
 
 from users.models import Role, User
 
@@ -21,11 +27,27 @@ class DishSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 class RestaurantSerializer(serializers.ModelSerializer):
-    dishes = DishSerializer(many=True)
+    dishes = serializers.SerializerMethodField()
 
     class Meta:
         model = Restaurant
         fields = '__all__'
+
+    def get_dishes(self, obj):
+        request = self.context.get('request')
+
+        dishes = obj.dishes.all()
+
+        search_query = request.query_params.get('search')
+        if search_query:
+            dishes = dishes.filter(name__icontains=search_query)
+
+        paginator = LimitOffsetPagination()
+        paginator.limit_param = 2
+
+        page = paginator.paginate_queryset(dishes, request, view=self)
+
+        return DishSerializer(page, many=True).data
 
 class OrderItemSerializer(serializers.ModelSerializer):
     dish = serializers.PrimaryKeyRelatedField(queryset=Dish.objects.all())
@@ -64,14 +86,17 @@ class OrderSerializer(serializers.ModelSerializer):
         else:
             return value
 
+class RestaurantFilters(rest_framework.FilterSet):
+    class Meta:
+        model = Restaurant
+        fields = ['name']
+
 class IsAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
-        assert type(request.user) == User
-        user: User = request.user
-        if user.role == Role.ADMIN:
-            return True
-        else:
+        user = request.user
+        if not user or not user.is_authenticated:
             return False
+        return getattr(user, 'role', None) == Role.ADMIN
 
 class FoodAPIViewSet(viewsets.GenericViewSet):
     queryset = Restaurant.objects.all()
@@ -135,8 +160,44 @@ class FoodAPIViewSet(viewsets.GenericViewSet):
 
         if request.method == "GET":
             restaurants = Restaurant.objects.all()
-            serializer = RestaurantSerializer(restaurants, many=True)
+
+            filtered_queryset = RestaurantFilters(request.GET, queryset=restaurants).qs
+
+            serializer = RestaurantSerializer(filtered_queryset, many=True, context={"request": request})
             return Response(data=serializer.data)
+
+# @api_view(["POST"])
+# @permission_classes([IsAdmin])
+def import_dishes(request):
+    if not IsAdmin().has_permission(request, view=None):
+        return Response({"detail": "You do not have permission to perform this action."}, status=403)
+
+    if request.method != "POST":
+        raise ValueError("Only POST requests are allowed.")
+
+    csv_file = request.FILES.get("file")
+    if csv_file is None:
+        raise ValueError("CSV file not found.")
+
+    decoded = csv_file.read().decode("utf-8")
+    reader = csv.DictReader(io.StringIO(decoded))
+    total = 0
+
+    for row in reader:
+        restaurant_name = row["restaurant"]
+        try:
+            rest = Restaurant.objects.get(name__icontains=restaurant_name.lower())
+        except Restaurant.DoesNotExist:
+            print("Skipping restaurant " + restaurant_name)
+        else:
+            print(f"{restaurant_name} not found.")
+
+        Dish.objects.create(name=row["name"], restaurant=rest, price=int(row["price"]))
+        total += 1
+
+    print(f"{total} restaurants uploaded to the database.")
+
+    return redirect(request.META.get("HTTP_REFERER", "/"))
 
 
 router = routers.DefaultRouter()
