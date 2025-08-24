@@ -22,7 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-xq43uh31#12+0bai_&qoe*+ohzo9knw2o3j_q(#@ur=59br@$5'
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -83,8 +83,12 @@ WSGI_APPLICATION = 'cateringproject.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv("DJANGO_DB_NAME", default="postgres"),
+        'USER': os.getenv("DJANGO_DB_USER", default="postgres"),
+        'PASSWORD': os.getenv("DJANGO_DB_PASSWORD", default="postgres"),
+        'HOST': os.getenv("DJANGO_DB_HOST", default="database"),
+        'PORT': os.getenv("DJANGO_DB_PORT", default="5432"),
     }
 }
 
@@ -162,6 +166,6 @@ CACHES = {
     }
 }
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-# EMAIL_HOST = os.getenv("DJANGO_EMAIL_HOST", default="mailing")
-# EMAIL_PORT = int(os.getenv("DJANGO_EMAIL_PORT", default="1025"))
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = os.getenv("DJANGO_EMAIL_HOST", default="mailing")
+EMAIL_PORT = int(os.getenv("DJANGO_EMAIL_PORT", default="1025"))
