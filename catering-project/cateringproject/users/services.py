@@ -1,6 +1,7 @@
 import uuid
 from shared.cache import CacheService
 from django.conf import settings
+from celery import shared_task
 from rest_framework.exceptions import ValidationError
 
 from django.core.mail import send_mail
@@ -26,6 +27,7 @@ class ActivationService:
         )
         return None
 
+    @shared_task(queue="low_priority")
     def send_user_activation_email(self, activation_key: str):
         if self.email is None:
             raise ValueError("Email cannot be None")

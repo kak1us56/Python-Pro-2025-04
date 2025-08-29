@@ -68,7 +68,8 @@ class UsersAPIViewSet(viewsets.GenericViewSet):
 
         activation_key = activation_service.create_activation_key()
         activation_service.save_activation_information(activation_key=activation_key, user_id=getattr(serializer.instance, "id"))
-        activation_service.send_user_activation_email(activation_key=activation_key)
+        # activation_service.send_user_activation_email(activation_key=activation_key)
+        activation_service.send_user_activation_email.delay(serializer.instance.email, activation_key)
         return Response(UserSerializer(serializer.instance).data, status=201)
 
     @action(methods=["post"], detail=False)

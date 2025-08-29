@@ -169,3 +169,21 @@ CACHES = {
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = os.getenv("DJANGO_EMAIL_HOST", default="mailing")
 EMAIL_PORT = int(os.getenv("DJANGO_EMAIL_PORT", default="1025"))
+
+# ==============================
+# CELERY SECTION
+# ==============================
+# CELERY_ACCEPT_CONTENT
+CELERY_BROKER_URL = os.getenv("DJANGO_BROKER_URL", default="amqp://guest:guest@rabbitmq:5672//")
+CELERY_ACCEPT_CONTENT = [
+    "pickle",
+    "application/json",
+]
+CELERY_TASK_SERIALIZER = "pickle"
+CELERY_EVENT_SERIALIZER = "pickle"
+
+CELERY_TASK_QUEUES = {
+    "default": {"exchange": "default", "routing_key": "default"},
+    "high_priority": {"exchange": "high_priority", "routing_key": "high_priority"},
+    "low_priority": {"exchange": "low_priority", "routing_key": "low_priority"},
+}
