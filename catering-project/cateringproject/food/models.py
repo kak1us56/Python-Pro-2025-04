@@ -44,6 +44,27 @@ class Order(models.Model):
     def __str__(self) -> str:
         return f"[{self.pk}] {self.status} for {self.user.email}"
 
+    def items_by_restaurant(self) -> dict["Restaurant", models.QuerySet["OrderItem"]]:
+        results = {}
+
+        qs = self.items.select_related('dish__restaurant')
+
+        restaurants = {item.dish.restaurant for item in qs}
+
+        for restaurant in restaurants:
+            results[restaurant] = qs.filter(dish__restaurant=restaurant)
+
+        return results
+
+    def delivery_meta(self) -> tuple[str, str]:
+        return (
+            self.items.select_related("dish__restaurant").values_list(
+                "dish__restaurant",
+                "dish__restaurant__address",
+            ).distinct()
+        )
+
+
 
 class OrderItem(models.Model):
     class Meta:

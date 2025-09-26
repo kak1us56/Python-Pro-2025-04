@@ -25,10 +25,21 @@ class OrderRequestBody(BaseModel):
 
 async def update_order_status(order_id: str):
     ORDER_STATUSES: tuple[OrderStatus, ...] = ("cooking", "cooked", "finished")
-    for status in ORDER_STATUSES:
-        time.sleep(random.randint(4, 6))
-        STORAGE[order_id] = status
-        print(f"KFC: [{order_id}] --> {status}")
+    async with httpx.AsyncClient() as client:
+        for status in ORDER_STATUSES:
+            time.sleep(random.randint(4, 6))
+            STORAGE[order_id] = status
+            print(f"KFC: [{order_id}] --> {status}")
+
+            try:
+                await client.post(
+                    CATERING_API_WEBHOOK_URL,
+                    json={"id": order_id, "status": status},
+                    timeout=5.0,
+                )
+                print(f"Webhook sent for {order_id} with status={status}")
+            except Exception as e:
+                print(f"Failed to send webhook for {order_id}: {e}")
 
 @app.post("/api/orders")
 async def make_order(body: OrderRequestBody, background_tasks: BackgroundTasks):

@@ -1,12 +1,16 @@
 import csv
 import io
+import json
+from dataclasses import asdict
 from datetime import date
 from django.shortcuts import render
+from django.http import JsonResponse
 from django.shortcuts import redirect
 from rest_framework import permissions, routers, serializers, viewsets, filters
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.decorators import action, permission_classes, api_view
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.exceptions import ValidationError
@@ -16,75 +20,14 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django_filters import rest_framework
 
 from users.models import Role, User
+from shared.cache import CacheService
+from .mapper import RESTAURANT_EXTERNAL_TO_INTERNAL
+from .providers import kfc
 
 from .models import Dish, Order, OrderItem, OrderStatus, Restaurant
+from .serializers import OrderSerializer, KFCOrderSerializer, RestaurantSerializer, OrderItemSerializer, DishSerializer
 from .enums import DeliveryProvider
-
-# Create your views here.
-class DishSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Dish
-        fields = "__all__"
-
-class RestaurantSerializer(serializers.ModelSerializer):
-    dishes = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Restaurant
-        fields = '__all__'
-
-    def get_dishes(self, obj):
-        request = self.context.get('request')
-
-        dishes = obj.dishes.all()
-
-        search_query = request.query_params.get('search')
-        if search_query:
-            dishes = dishes.filter(name__icontains=search_query)
-
-        paginator = LimitOffsetPagination()
-        paginator.limit_param = 2
-
-        page = paginator.paginate_queryset(dishes, request, view=self)
-
-        return DishSerializer(page, many=True).data
-
-class OrderItemSerializer(serializers.ModelSerializer):
-    dish = serializers.PrimaryKeyRelatedField(queryset=Dish.objects.all())
-    quantity = serializers.IntegerField(min_value=1, max_value=20)
-
-    class Meta:
-        model = OrderItem
-        fields = ['dish', 'quantity']
-
-class OrderSerializer(serializers.ModelSerializer):
-    id = serializers.PrimaryKeyRelatedField(read_only=True)
-    items = OrderItemSerializer(many=True)
-    eta = serializers.DateField()
-    total = serializers.IntegerField(min_value=1, read_only=True)
-    status = serializers.ChoiceField(OrderStatus.choices(), read_only=True)
-    delivery_provider = serializers.CharField()
-
-    class Meta:
-        model = Order
-        fields = "__all__"
-
-    @property
-    def calculated_total(self) -> int:
-        total = 0
-
-        for item in self.validated_data["items"]:
-            dish: Dish = item["dish"]
-            quantity: int = item["quantity"]
-            total += dish.price * quantity
-
-        return total
-
-    def validate_eta(self, value: date):
-        if (value - date.today()).days < 1:
-            raise ValidationError("ETA must be min 1 day after today.")
-        else:
-            return value
+from .services import schedule_order, all_orders_cooked, TrackingOrder
 
 class RestaurantFilters(rest_framework.FilterSet):
     class Meta:
@@ -113,7 +56,7 @@ class FoodAPIViewSet(viewsets.GenericViewSet):
         serializer.is_valid(raise_exception=True)
 
         assert type(request.user) is User
-
+        print('create_order')
         with transaction.atomic():
             order = Order.objects.create(
                 status=OrderStatus.NOT_STARTED,
@@ -125,7 +68,6 @@ class FoodAPIViewSet(viewsets.GenericViewSet):
 
             items = serializer.validated_data["items"]
             for dish_order in items:
-                # raise ValueError("some error occured")
                 instance = OrderItem.objects.create(
                     dish=dish_order["dish"],
                     quantity=dish_order["quantity"],
@@ -135,7 +77,7 @@ class FoodAPIViewSet(viewsets.GenericViewSet):
 
         print(f"New Food Order is created: {order.pk}. ETA: {order.eta}")
 
-        # TODO: Run scheduler
+        schedule_order(order)
 
         return Response(OrderSerializer(order).data, status=201)
 
@@ -199,6 +141,48 @@ def import_dishes(request):
 
     return redirect(request.META.get("HTTP_REFERER", "/"))
 
+@csrf_exempt
+def kfc_webhook(request):
+    print("KFC Webhook is Handled")
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    print(f"KFC webhook payload: {data}")
+
+    external_id = data.get("id") or data.get("order_id")
+    if not external_id:
+        return JsonResponse({"error": "Missing external_id"}, status=400)
+
+    cache = CacheService()
+    restaurant = Restaurant.objects.get(name="KFC")
+    kfc_cache_order = cache.get("kfc_orders", key=external_id)
+
+    if not kfc_cache_order:
+        print(f'KFC webhook received for unknown order_id={external_id}')
+        return JsonResponse({"error": "Order not found"}, status=404)
+
+    def get_internal_status(status: kfc.OrderStatus) -> OrderStatus:
+        return RESTAURANT_EXTERNAL_TO_INTERNAL["kfc"][status]
+
+    order: Order = Order.objects.get(id=kfc_cache_order["internal_order_id"])
+    tracking_order = TrackingOrder(**cache.get(namespace="orders", key=str(order.pk)))
+
+    internal_status: OrderStatus = get_internal_status(data["status"])
+    print(f"Mapped internal status: {internal_status}")
+    tracking_order.restaurants[str(restaurant.pk)] |= {
+        "external_id": data["id"],
+        "status": internal_status,
+    }
+
+    cache.set(namespace="orders", key=str(order.pk), value=asdict(tracking_order), ttl=3600)
+
+    if internal_status == OrderStatus.COOKED:
+        all_orders_cooked(order.pk)
+
+    return JsonResponse({"message": "ok"})
 
 router = routers.DefaultRouter()
 router.register(prefix="", viewset=FoodAPIViewSet, basename="food")

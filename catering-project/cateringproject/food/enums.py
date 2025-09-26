@@ -5,6 +5,7 @@ class OrderStatus(enum.StrEnum):
     COOKING_REJECTED = enum.auto()
     COOKING = enum.auto()
     COOKED = enum.auto()
+    FINISHED = enum.auto()
     DELIVERY_LOOKUP = enum.auto()
     DELIVERY = enum.auto()
     DELIVERED = enum.auto()

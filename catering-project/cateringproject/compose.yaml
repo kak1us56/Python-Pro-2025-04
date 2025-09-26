@@ -9,31 +9,37 @@ services:
       - database
       - cache
       - mailing
-#    volumes:
-#      - ./:/app/
+    volumes:
+      - ./:/app/
   worker-default:
     <<: *api
     container_name: catering-worker-default
     entrypoint: bash
-    command: -c "celery -A config worker -l INFO -Q default"
+    command: -c "celery -A cateringproject worker -l INFO -Q default"
+    environment:
+      - C_FORCE_ROOT=true
     depends_on:
-      - rabbitmq
+      - broker
     ports: []
   worker-high-priority:
     <<: *api
     container_name: catering-worker-high-priority
     entrypoint: bash
-    command: -c "celery -A config worker -l INFO -Q high_priority"
+    command: -c "celery -A cateringproject worker -l INFO -Q high_priority"
+    environment:
+      - C_FORCE_ROOT=true
     depends_on:
-      - rabbitmq
+      - broker
     ports: []
   worker-low-priority:
     <<: *api
     container_name: catering-worker-low-priority
     entrypoint: bash
-    command: -c "celery -A config worker -l INFO -Q low_priority"
+    command: -c "celery -A cateringproject worker -l INFO -Q low_priority"
+    environment:
+      - C_FORCE_ROOT=true
     depends_on:
-      - rabbitmq
+      - broker
     ports: [ ]
   database:
     image: postgres:17.5
@@ -46,7 +52,7 @@ services:
     image: redis:7
     ports:
       - "6379:6379"
-  rabbitmq:
+  broker:
     image: rabbitmq:3-management
     ports:
       - "5672:5672"

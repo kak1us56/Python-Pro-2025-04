@@ -1,4 +1,5 @@
 import enum
+import os
 from dataclasses import dataclass, asdict
 
 import httpx
@@ -24,7 +25,8 @@ class OrderResponse:
     status: OrderStatus
 
 class Client:
-    BASE_URL = "http://silpo-mock:8001/api/orders"
+    # BASE_URL = "http://localhost:8001/api/orders"
+    BASE_URL = os.getenv("SILPO_BASE_URL", "http://silpo-mock:8001/api/orders")
 
     @classmethod
     def create_order(cls, order: OrderRequestBody):

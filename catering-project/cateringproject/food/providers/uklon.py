@@ -1,4 +1,5 @@
 import enum
+import os
 from dataclasses import asdict, dataclass
 
 import httpx
@@ -15,14 +16,18 @@ class OrderRequestBody:
 
 @dataclass
 class OrderResponse:
-    id: str
+    order_id: str
     status: OrderStatus
     location: tuple[float, float]
     addresses: list[str]
     comments: list[str]
 
+    @property
+    def id(self):
+        return self.order_id
+
 class Client:
-    BASE_URL = "http://uklon-mock:8003/drivers/orders"
+    BASE_URL = os.getenv("UKLON_BASE_URL", "http://uklon-mock:8003/drivers/orders")
 
     @classmethod
     def create_order(cls, order: OrderRequestBody):

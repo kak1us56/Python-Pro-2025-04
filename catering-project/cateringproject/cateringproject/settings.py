@@ -81,14 +81,21 @@ WSGI_APPLICATION = 'cateringproject.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': os.getenv("DJANGO_DB_NAME", default="postgres"),
+#         'USER': os.getenv("DJANGO_DB_USER", default="postgres"),
+#         'PASSWORD': os.getenv("DJANGO_DB_PASSWORD", default="postgres"),
+#         'HOST': os.getenv("DJANGO_DB_HOST", default="database"),
+#         'PORT': os.getenv("DJANGO_DB_PORT", default="5432"),
+#     }
+# }
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv("DJANGO_DB_NAME", default="postgres"),
-        'USER': os.getenv("DJANGO_DB_USER", default="postgres"),
-        'PASSWORD': os.getenv("DJANGO_DB_PASSWORD", default="postgres"),
-        'HOST': os.getenv("DJANGO_DB_HOST", default="database"),
-        'PORT': os.getenv("DJANGO_DB_PORT", default="5432"),
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
@@ -161,7 +168,8 @@ SIMPLE_JWT = {
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": os.getenv("DJANGO_CACHE_URL", default="redis://cache:6379/0"),
+        "LOCATION": os.getenv("DJANGO_CACHE_URL", default="redis://localhost:6379/0"),
+        # "LOCATION": "redis://localhost:6379/0",
         "TIMEOUT": 50,
     }
 }
@@ -174,7 +182,8 @@ EMAIL_PORT = int(os.getenv("DJANGO_EMAIL_PORT", default="1025"))
 # CELERY SECTION
 # ==============================
 # CELERY_ACCEPT_CONTENT
-CELERY_BROKER_URL = os.getenv("DJANGO_BROKER_URL", default="amqp://guest:guest@rabbitmq:5672//")
+CELERY_BROKER_URL = os.getenv("DJANGO_BROKER_URL", default="amqp://guest:guest@localhost:5672//")
+# CELERY_BROKER_URL = "amqp://guest:guest@localhost:5672//"
 CELERY_ACCEPT_CONTENT = [
     "pickle",
     "application/json",

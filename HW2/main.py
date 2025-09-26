@@ -76,15 +76,17 @@ storage: list[dict] = [
 
 
 # CRUD
-def add_student(student: dict) -> dict | None:
-    if not student.get("name"):
+def add_student(name: str, marks: list[int], details: str | None = "") -> dict | None:
+    if not name:
         return None
     else:
-        list_id = []
-        for student_by_id in storage:
-            list_id.append(student_by_id['id'])
-
-        student['id'] = max(list_id) + 1
+        student_id = max((student["id"] for student in storage), default=0) + 1
+        student = {
+            "id": student_id,
+            "name": name,
+            "marks": marks,
+            "info": details
+        }
 
         storage.append(student)
 
@@ -102,7 +104,7 @@ def search_student(student_id: int) -> None:
     for student in storage:
         info = (
             "=========================\n"
-            f"[{student['id']}] Student {student['name']}\n"
+            f"[{student['id']}] Student: {student['name']}\n"
             f"Marks: {student['marks']}\n"
             f"{'Info: ' + student['info'] + '\n' if student.get('info') else ''}"
             "=========================\n"
@@ -116,20 +118,18 @@ def search_student(student_id: int) -> None:
 
 
 def ask_student_payload() -> dict:
-    ask_prompt = (
-        "Enter student's payload data using text template: "
-        "John Doe;1,2,3,4,5\n"
-        "where 'John Doe' is a full name and [1,2,3,4,5] are marks.\n"
-        "The data must be separated by ';'"
-    )
+    ask_prompt = "Enter student's name: "
 
     def parse(data) -> dict:
         info = ''
 
         if len(data.split(';')) == 2:
-            name, raw_marks = data.split(";")
+            try:
+                name, info = data.split(';')
+            except ValueError:
+                print("Entered incorrect data")
         else:
-            name, raw_marks, info = data.split(";")
+            name = data
 
         added_student = {
             "name": name,
@@ -163,7 +163,7 @@ def student_management_command_handle(command: str):
     elif command == "add":
         data = ask_student_payload()
         if data:
-            student: dict | None = add_student(data)
+            student: dict | None = add_student(data['name'], data['marks'], data['info'])
             print(f"Student: {student['name']} is added")
         else:
             print("The student's data is NOT correct. Please try again")
@@ -188,7 +188,6 @@ def handle_user_input():
     print(HELP_MESSAGE)
 
     while True:
-
         command = input("\n Select command: ")
 
         if command == "quit":
@@ -199,6 +198,8 @@ def handle_user_input():
         else:
             student_management_command_handle(command)
 
+def main():
+    handle_user_input()
 
 if __name__ == "__main__":
-    handle_user_input()
+    main()

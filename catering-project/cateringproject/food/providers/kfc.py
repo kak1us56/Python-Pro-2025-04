@@ -1,4 +1,5 @@
 import enum
+import os
 from dataclasses import dataclass, asdict
 
 import httpx
@@ -24,7 +25,7 @@ class OrderResponse:
     status: OrderStatus
 
 class Client:
-    BASE_URL = "http://kfc-mock:8002/api/orders"
+    BASE_URL = os.getenv("KFC_BASE_URL", "http://kfc-mock:8001/api/orders")
 
     @classmethod
     def create_order(cls, order: OrderRequestBody):

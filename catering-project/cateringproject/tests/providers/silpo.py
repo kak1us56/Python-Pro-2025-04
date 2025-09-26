@@ -36,6 +36,6 @@ def make_order(body: OrderRequestBody, background_tasks: BackgroundTasks):
 
     return {"id": order_id, "status": "not started"}
 
-@app.get("/api/order/{order_id}")
+@app.get("/api/orders/{order_id}")
 def get_order(order_id: str):
     return {"id": order_id, "status": STORAGE.get(order_id)}

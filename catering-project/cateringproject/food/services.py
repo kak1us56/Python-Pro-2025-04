@@ -5,7 +5,7 @@ from django.db.models import QuerySet
 
 from .mapper import RESTAURANT_EXTERNAL_TO_INTERNAL
 from shared.cache import CacheService
-from cateringproject import celery_app
+from cateringproject.celery import app as celery_app
 from food.providers import uklon
 
 from .providers import kfc, silpo
@@ -26,9 +26,13 @@ def all_orders_cooked(order_id: int):
         Order.objects.filter(id=order_id).update(status=OrderStatus.COOKED)
         print(f"Order {order_id} has been cooked.")
 
-        # order_delivery.delay(order_id)
+        order_delivery.delay(order_id)
+
+        return True
     else:
         print(f"Not all orders are cooked: {tracking_order=}")
+
+        return False
 
 @celery_app.task(queue="default")
 def order_delivery(order_id: int):
@@ -61,7 +65,7 @@ def order_delivery(order_id: int):
 
     current_status: uklon.OrderStatus = _response.status
 
-    while current_status.status != OrderStatus.DELIVERED:
+    while current_status != OrderStatus.DELIVERED:
         response = provider.get_order(_response.id)
 
         print(f"🚙 Uklon [{response.status}]: 📍 {response.location}")
@@ -81,12 +85,14 @@ def order_delivery(order_id: int):
     Order.objects.filter(id=order_id).update(status=OrderStatus.DELIVERED)
 
     tracking_order.delivery["status"] = OrderStatus.DELIVERED
-    cache.delete("orders", str(order_id))
+    # cache.delete("orders", str(order_id))
 
     print("✅ DONE with Delivery")
 
 @celery_app.task(queue="high_priority")
-def order_in_silpo(order_id: int, items: QuerySet[OrderItem]):
+def order_in_silpo(order_id: int, items: list[dict]):
+    items = [OrderItem.objects.get(id=item["id"]) for item in items]
+
     client = silpo.Client()
     cache = CacheService()
     restaurant = Restaurant.objects.get(name="Silpo")
@@ -107,7 +113,9 @@ def order_in_silpo(order_id: int, items: QuerySet[OrderItem]):
 
         if not silpo_order["external_id"]:
             response: silpo.OrderResponse = client.create_order(
-                order=[silpo.OrderItem(dish=item.dish.name, quantity=item.quantity) for item in items]
+                silpo.OrderRequestBody(
+                    order=[silpo.OrderItem(dish=item.dish.name, quantity=item.quantity) for item in items]
+                )
             )
             internal_status: OrderStatus = get_internal_status(response.status)
 
@@ -123,7 +131,7 @@ def order_in_silpo(order_id: int, items: QuerySet[OrderItem]):
 
             print(f"Tracking for Silpo Order with HTTP GET /api/order. Status: {internal_status}")
 
-            if silpo_order["status"] == internal_status:
+            if silpo_order["status"] != internal_status:
                 tracking_order.restaurants[str(restaurant.pk)]["status"] = internal_status
                 print(f"Silpo order status changed to {internal_status}")
                 cache.set("orders", str(order_id), asdict(tracking_order), ttl=3600)
@@ -136,7 +144,7 @@ def order_in_silpo(order_id: int, items: QuerySet[OrderItem]):
                     all_orders_cooked(order_id)
 
 @celery_app.task(queue="high_priority")
-def order_in_kfc(order_id: int, items: QuerySet[OrderItem]):
+def order_in_kfc(order_id: int, items: list[dict]):
     client = kfc.Client()
     cache = CacheService()
     restaurant = Restaurant.objects.get(name="KFC")
@@ -147,7 +155,9 @@ def order_in_kfc(order_id: int, items: QuerySet[OrderItem]):
     tracking_order = TrackingOrder(**cache.get(namespace="orders", key=str(order_id)))
 
     response: kfc.OrderResponse = client.create_order(
-        kfc.OrderRequestBody(order=[kfc.OrderItem(dish=item.dish.name, quantity=item.quantity) for item in items])
+        kfc.OrderRequestBody(
+            order=[kfc.OrderItem(dish=item["dish__name"], quantity=item["quantity"]) for item in items]
+        )
     )
     internal_status = get_internal_status(response.status)
 
@@ -176,7 +186,7 @@ def schedule_order(order: Order):
     cache = CacheService()
     tracking_order = TrackingOrder()
 
-    items_by_restaurants = order.items_by_restaurants()
+    items_by_restaurants = order.items_by_restaurant()
     for restaurant, items in items_by_restaurants.items():
         tracking_order.restaurants[str(restaurant.pk)] = {
             "external_id": None,
@@ -188,8 +198,9 @@ def schedule_order(order: Order):
     for restaurant, items in items_by_restaurants.items():
         match restaurant.name.lower():
             case "kfc":
-                order_in_kfc.delay(order.pk, items)
+                # order_in_kfc.delay(order.pk, list(items.values("id", "dish__name", "quantity")))
+                order_in_kfc(order.pk, list(items.values("id", "dish__name", "quantity")))
             case "silpo":
-                order_in_silpo.delay(order.pk, items)
+                order_in_silpo.delay(order.pk, list(items.values("id", "dish__name", "quantity")))
             case _:
                 raise ValueError(f"Restaurant {restaurant.name} is not supported")

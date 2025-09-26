@@ -1,11 +1,11 @@
 import uuid
 from shared.cache import CacheService
 from django.conf import settings
-from celery import shared_task
 from rest_framework.exceptions import ValidationError
 
 from django.core.mail import send_mail
 from .models import User
+from .tasks import send_user_activation_email_task
 
 class ActivationService:
     UUID_NAMESPACE = uuid.uuid4()
@@ -27,18 +27,11 @@ class ActivationService:
         )
         return None
 
-    @shared_task(queue="low_priority")
     def send_user_activation_email(self, activation_key: str):
         if self.email is None:
             raise ValueError("Email cannot be None")
 
-        activation_link: str = f"https://frontend.catering.com/activation/{activation_key}"
-        send_mail(
-            subject="User Activation",
-            message=f"Please, activate your account: {activation_link}",
-            from_email="admin@catering.com",
-            recipient_list=[self.email],
-        )
+        send_user_activation_email_task.delay(self.email, activation_key)
 
     def activate_user(self, activation_key: str) -> None:
         user_cache_payload: dict | None = self.cache.get(
